@@ -1,0 +1,19 @@
+{
+    "name": "huangzhhui/sensorsdata",
+    "description": "sensorsdata php sdk",
+    "keywords": ["sdk", "sensorsdata"],
+    "license": "BSD-2-Clause",
+    "authors": [
+        {
+            "name": "Huang Zhaohui",
+            "email": "huangzhwork@gmail.com"
+        }
+    ],
+    "require": {
+        "php": ">=5.6.0"
+    },
+    "autoload": {
+        "classmap": ["src"]
+    },
+    "minimum-stability": "stable"
+}
