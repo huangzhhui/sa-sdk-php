@@ -13,7 +13,7 @@
         "php": ">=5.6.0"
     },
     "autoload": {
-        "classmap": ["src"]
+        "files": ["src/SensorsAnalytics.php"]
     },
     "minimum-stability": "stable"
 }
