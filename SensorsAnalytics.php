@@ -127,7 +127,7 @@ class SensorsAnalytics {
             unset($properties['$time']);
             return $time;
         }
-        return (int)(microtime(true) * 1000);
+        return sprintf("%.0f", microtime(true) * 1000);
     }
 
     /**
