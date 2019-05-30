@@ -1,6 +1,6 @@
 <?php
 
-define('SENSORS_ANALYTICS_SDK_VERSION', '1.10.7');
+define('SENSORS_ANALYTICS_SDK_VERSION', '1.10.1');
 
 class SensorsAnalyticsException extends \Exception {
 }
@@ -21,51 +21,19 @@ class SensorsAnalytics {
 
     private $_consumer;
     private $_super_properties;
-    private $_is_win;
-    private $_project_name;
-
-    /*
-     * 为兼容旧版，实现构造函数重载
-     */
-    public function __construct() {
-        $a = func_get_args(); //获取构造函数中的参数
-        $i = count($a);
-        if (method_exists($this,$f='__construct'.$i)) {
-            call_user_func_array(array($this,$f),$a);
-        }
-    }
 
     /**
      * 初始化一个 SensorsAnalytics 的实例用于数据发送。
      *
      * @param AbstractConsumer $consumer
-     * @param AbstractConsumer $project_name
+     * @throws \SensorsAnalyticsException
      */
-    public function __construct2($consumer, $project_name) {
-        $this->_is_win = false;
+    public function __construct($consumer) {
         // 不支持 Windows，因为 Windows 版本的 PHP 都不支持 long
         if (strtoupper(substr(PHP_OS, 0, 3)) == "WIN") {
-            $this->_is_win = true;
+            throw new SensorsAnalyticsException("Sensors Analytics PHP SDK dons't not support Windows");
         }
         $this->_consumer = $consumer;
-        $this->_project_name = $project_name;
-        $this->clear_super_properties();
-    }
-
-    /**
-     * 初始化一个 SensorsAnalytics 的实例用于数据发送。
-     *
-     * @param AbstractConsumer $consumer
-     * @param AbstractConsumer $project_name
-     */
-    public function __construct1($consumer) {
-        $this->_is_win = false;
-        // 不支持 Windows，因为 Windows 版本的 PHP 都不支持 long
-        if (strtoupper(substr(PHP_OS, 0, 3)) == "WIN") {
-            $this->_is_win = true;
-        }
-        $this->_consumer = $consumer;
-        $this->_project_name = null;
         $this->clear_super_properties();
     }
 
@@ -144,36 +112,18 @@ class SensorsAnalytics {
         $data['distinct_id'] = strval($data['distinct_id']);
 
         // 检查 time
-        if ($this->_is_win) { // windows use string(windows 32bit do not support int64)
-            if (!is_string($data['time'])) {
-                throw new SensorsAnalyticsIllegalDataException("property [time] type must be string");
-            }
-            $ts = $data['time'];
-            $ts_num = strlen($ts);
-            if (strlen($ts_num) == 15) {
-                $ts = substr($ts, 0, 13);
-            }
+        $ts = (int)($data['time']);
+        $ts_num = strlen($ts);
+        if ($ts_num < 10 || $ts_num > 13) {
+            throw new SensorsAnalyticsIllegalDataException("property [time] must be a timestamp in microseconds");
+        }
 
-            if ($ts_num < 10 || $ts_num > 13) {
-                throw new SensorsAnalyticsIllegalDataException("property [time] must be a timestamp in microseconds");
-            }
-
-            if ($ts_num == 10) {
-                $ts .= "000";
-            }
-        } else { // linux use int
-            $ts = (int)($data['time']);
-            $ts_num = strlen($ts);
-            if ($ts_num < 10 || $ts_num > 13) {
-                throw new SensorsAnalyticsIllegalDataException("property [time] must be a timestamp in microseconds");
-            }
-
-            if ($ts_num == 10) {
-                $ts *= 1000;
-            }
+        if ($ts_num == 10) {
+            $ts *= 1000;
         }
         $data['time'] = $ts;
 
+        $name_pattern = "/^((?!^distinct_id$|^original_id$|^time$|^properties$|^id$|^first_id$|^second_id$|^users$|^events$|^event$|^user_id$|^date$|^datetime$)[a-zA-Z_$][a-zA-Z\\d_$]{0,99})$/i";
         // 检查 Event Name
         if (isset($data['event'])) {
             $this->_assert_key_with_regex($data['event']);
@@ -182,7 +132,6 @@ class SensorsAnalytics {
         // 检查 properties
         if (isset($data['properties']) && is_array($data['properties'])) {
             $this->_assert_properties($data['properties']);
-
             // XXX: 解决 PHP 中空 array() 转换成 JSON [] 的问题
             if (count($data['properties']) == 0) {
                 $data['properties'] = new \ArrayObject();
@@ -197,7 +146,7 @@ class SensorsAnalytics {
      * 如果用户传入了 $time 字段，则不使用当前时间。
      *
      * @param array $properties
-     * @return int/string
+     * @return int
      */
     private function _extract_user_time(&$properties = array()) {
         if (array_key_exists('$time', $properties)) {
@@ -205,11 +154,7 @@ class SensorsAnalytics {
             unset($properties['$time']);
             return $time;
         }
-        if ($this->_is_win) { // windows return string
-            return substr((microtime(true) * 1000), 0, 13);
-        } else {
-            return (int)(microtime(true) * 1000);
-        }
+        return (int)(microtime(true) * 1000);
     }
 
     /**
@@ -223,7 +168,7 @@ class SensorsAnalytics {
                 );
 
         if (isset($this->_super_properties['$app_version'])) {
-            $lib_properties['$app_version'] = $this->_super_properties['$app_version']; 
+            $lib_properties['$app_version'] = $this->_super_properties['$app_version'];
         }
 
         try {
@@ -275,6 +220,7 @@ class SensorsAnalytics {
      * @param string $event_name 事件名称。
      * @param array $properties 事件的属性。
      * @return bool
+     * @throws \SensorsAnalyticsIllegalDataException
      */
     public function track($distinct_id, $is_login_id, $event_name, $properties = array()) {
         if (!is_string($event_name)) {
@@ -298,7 +244,7 @@ class SensorsAnalytics {
      * @param string $original_id 用户注册前的唯一标识。
      * @param array $properties 事件的属性。
      * @return bool
-     * @throws SensorsAnalyticsIllegalDataException
+     * @throws \SensorsAnalyticsIllegalDataException 当 $original_id 不存在或参数有误时抛出
      */
     public function track_signup($distinct_id, $original_id, $properties = array()) {
         if ($properties) {
@@ -323,6 +269,7 @@ class SensorsAnalytics {
      * @param bool $is_login_id 用户标识是否是登录 ID，false 表示该标识是一个匿名 ID。
      * @param array $profiles
      * @return bool
+     * @throws \SensorsAnalyticsIllegalDataException
      */
     public function profile_set($distinct_id, $is_login_id, $profiles = array()) {
         if (!is_bool($is_login_id)) {
@@ -338,6 +285,7 @@ class SensorsAnalytics {
      * @param bool $is_login_id 用户标识是否是登录 ID，false 表示该标识是一个匿名 ID。
      * @param array $profiles
      * @return bool
+     * @throws \SensorsAnalyticsIllegalDataException
      */
     public function profile_set_once($distinct_id, $is_login_id, $profiles = array()) {
         if (!is_bool($is_login_id)) {
@@ -353,6 +301,7 @@ class SensorsAnalytics {
      * @param bool $is_login_id 用户标识是否是登录 ID，false 表示该标识是一个匿名 ID。
      * @param array $profiles
      * @return bool
+     * @throws \SensorsAnalyticsIllegalDataException
      */
     public function profile_increment($distinct_id, $is_login_id, $profiles = array()) {
         if (!is_bool($is_login_id)) {
@@ -368,6 +317,7 @@ class SensorsAnalytics {
      * @param bool $is_login_id 用户标识是否是登录 ID，false 表示该标识是一个匿名 ID。
      * @param array $profiles
      * @return bool
+     * @throws \SensorsAnalyticsIllegalDataException
      */
     public function profile_append($distinct_id, $is_login_id, $profiles = array()) {
         if (!is_bool($is_login_id)) {
@@ -383,6 +333,7 @@ class SensorsAnalytics {
      * @param bool $is_login_id 用户标识是否是登录 ID，false 表示该标识是一个匿名 ID。
      * @param array $profile_keys
      * @return bool
+     * @throws \SensorsAnalyticsIllegalDataException
      */
     public function profile_unset($distinct_id, $is_login_id, $profile_keys = array()) {
         if (!is_bool($is_login_id)) {
@@ -398,13 +349,13 @@ class SensorsAnalytics {
         return $this->_track_event('profile_unset', null, $distinct_id, $is_login_id, null, $profile_keys);
     }
 
-
     /**
      * 删除整个用户的信息。
      *
      * @param string $distinct_id 用户的唯一标识。
      * @param bool $is_login_id 用户标识是否是登录 ID，false 表示该标识是一个匿名 ID。
      * @return bool
+     * @throws \SensorsAnalyticsIllegalDataException
      */
     public function profile_delete($distinct_id, $is_login_id) {
         if (!is_bool($is_login_id)) {
@@ -416,8 +367,8 @@ class SensorsAnalytics {
     /**
      * 直接设置一个物品，如果已存在则覆盖。
      *
-     * @param string $itemType item类型。
-     * @param string $itemId item的唯一标识。
+     * @param string $item_type item类型。
+     * @param string $item_id item的唯一标识。
      * @param array $properties item属性
      * @return bool
      */
@@ -428,13 +379,12 @@ class SensorsAnalytics {
     /**
      * 删除一个物品
      *
-     * @param string $itemType item类型。
-     * @param string $itemId item的唯一标识。
-     * @param array $properties item属性
+     * @param string $item_type item类型。
+     * @param string $item_id item的唯一标识。
      * @return bool
      */
-    public function item_delete($item_type, $item_id, $properties = array()) {
-        return $this->_track_item('item_delete', $item_type, $item_id, $properties);
+    public function item_delete($item_type, $item_id) {
+        return $this->_track_item('item_delete', $item_type, $item_id, null);
     }
 
     public function _track_item($action_type, $item_type, $item_id, $properties = array()) {
@@ -442,9 +392,7 @@ class SensorsAnalytics {
         $this->_assert_key($item_id);
         $this->_assert_properties($properties);
 
-        $event_project = null;
-
-        if ($properties && isset($properties['$project'])) {
+        if ($properties && $properties['$project']) {
             $event_project = $properties['$project'];
             unset($properties['$project']);
         }
@@ -462,7 +410,7 @@ class SensorsAnalytics {
             $data['project'] = $this->_project_name;
         }
 
-        if ($event_project) {
+        if (isset($event_project) && $event_project) {
             $data['project'] = $event_project;
         }
 
@@ -516,15 +464,14 @@ class SensorsAnalytics {
      * @param string $original_id
      * @param array $properties
      * @return bool
+     * @throws \SensorsAnalyticsIllegalDataException
      * @internal param array $profiles
      */
     public function _track_event($update_type, $event_name, $distinct_id, $is_login_id, $original_id, $properties) {
         $event_time = $this->_extract_user_time($properties);
-
         if ($is_login_id) {
             $properties['$is_login_id'] = true;
         }
-
         $data = array(
             'type' => $update_type,
             'properties' => $properties,
@@ -532,22 +479,18 @@ class SensorsAnalytics {
             'distinct_id' => $distinct_id,
             'lib' => $this->_get_lib_properties(),
         );
-
-        if ($this->_project_name) {
+        if (isset($this->_project_name) && $this->_project_name) {
             $data['project'] = $this->_project_name;
         }
-
         if (strcmp($update_type, "track") == 0) {
             $data['event'] = $event_name;
         } else if (strcmp($update_type, "track_signup") == 0) {
             $data['event'] = $event_name;
             $data['original_id'] = $original_id;
         }
-
         $data = $this->_normalize_data($data);
         return $this->_consumer->send($this->_json_dumps($data));
     }
-
 }
 
 
@@ -611,7 +554,7 @@ class DebugConsumer extends AbstractConsumer {
     /**
      * DebugConsumer constructor,用于调试模式.
      * 具体说明可以参照:http://www.sensorsdata.cn/manual/debug_mode.html
-     * 
+     *
      * @param string $url_prefix 服务器的URL地址
      * @param bool $write_data 是否把发送的数据真正写入
      * @param int $request_timeout 请求服务器的超时时间,单位毫秒.
@@ -697,13 +640,13 @@ class DebugConsumer extends AbstractConsumer {
         if ($pos === 0) {
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         }
-        
+
         $http_response_header = curl_exec($ch);
         if (!$http_response_header) {
             throw new SensorsAnalyticsDebugException(
-                   "Failed to connect to SensorsAnalytics. [error='".curl_error($ch)."']");
+                   "Failed to connect to SensorsAnalytics. [error='" + curl_error($ch) + "']");
         }
-        
+
         $result = array(
             "ret_content" => $http_response_header,
             "ret_code" => curl_getinfo($ch, CURLINFO_HTTP_CODE)
@@ -715,7 +658,7 @@ class DebugConsumer extends AbstractConsumer {
     /**
      * 对待发送的数据进行编码
      *
-     * @param array $msg_list
+     * @param string $msg_list
      * @return string
      */
     private function _encode_msg_list($msg_list) {
@@ -761,14 +704,10 @@ class BatchConsumer extends AbstractConsumer {
     }
 
     public function flush() {
-        if (empty($this->_buffers)) {
-            $ret = false;
-        } else {
-            $ret = $this->_do_request(array(
-                "data_list" => $this->_encode_msg_list($this->_buffers),
-                "gzip" => 1
-            ));
-        }
+        $ret = $this->_do_request(array(
+            "data_list" => $this->_encode_msg_list($this->_buffers),
+            "gzip" => 1
+        ));
         if ($ret) {
             $this->_buffers = array();
         }
@@ -788,7 +727,6 @@ class BatchConsumer extends AbstractConsumer {
         }
 
         $ch = curl_init();
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
         curl_setopt($ch, CURLOPT_URL, $this->_url_prefix);
         curl_setopt($ch, CURLOPT_HEADER, 0);
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT_MS, $this->_request_timeout);
@@ -796,13 +734,6 @@ class BatchConsumer extends AbstractConsumer {
         curl_setopt($ch, CURLOPT_POST, 1);
         curl_setopt($ch, CURLOPT_POSTFIELDS, implode('&', $params));
         curl_setopt($ch, CURLOPT_USERAGENT, "PHP SDK");
-
-        //judge https
-        $pos = strpos($this->_url_prefix, "https");
-        if ($pos === 0) {
-            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        }
-
         $ret = curl_exec($ch);
 
         if (false === $ret) {
@@ -817,7 +748,7 @@ class BatchConsumer extends AbstractConsumer {
     /**
      * 对待发送的数据进行编码
      *
-     * @param array $msg_list
+     * @param string $msg_list
      * @return string
      */
     private function _encode_msg_list($msg_list) {

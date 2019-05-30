@@ -1,0 +1,11 @@
+# IDE
+/.buildpath
+/.project
+/.settings
+/.idea
+/trunk/log.txt
+/nbproject
+/.netbeans.xml
+
+# Composer
+./vendor
