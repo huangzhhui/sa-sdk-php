@@ -155,7 +155,7 @@ class SensorsAnalytics {
                 $line = $trace[2]['line'];
 
                 $lib_properties['$lib_detail'] = "####$file##$line";
-            } else if (count($trace > 3)) {
+            } else if (count($trace) > 3) {
                 if (isset($trace[3]['class'])) {
                     // 类成员函数内调用
                     $class = $trace[3]['class'];
