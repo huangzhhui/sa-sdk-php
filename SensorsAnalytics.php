@@ -26,6 +26,7 @@ class SensorsAnalytics {
      * 初始化一个 SensorsAnalytics 的实例用于数据发送。
      *
      * @param AbstractConsumer $consumer
+     * @throws \SensorsAnalyticsException
      */
     public function __construct($consumer) {
         // 不支持 Windows，因为 Windows 版本的 PHP 都不支持 long
@@ -35,7 +36,7 @@ class SensorsAnalytics {
         $this->_consumer = $consumer;
         $this->clear_super_properties();
     }
- 
+
     private function _normalize_data($data) {
         // 检查 distinct_id
         if (!isset($data['distinct_id']) or strlen($data['distinct_id']) == 0) {
@@ -139,11 +140,11 @@ class SensorsAnalytics {
                 '$lib_version' => SENSORS_ANALYTICS_SDK_VERSION,
                 '$lib_method' => 'code',
                 );
-        
+
         if (isset($this->_super_properties['$app_version'])) {
-            $lib_properties['$app_version'] = $this->_super_properties['$app_version']; 
+            $lib_properties['$app_version'] = $this->_super_properties['$app_version'];
         }
-        
+
         try {
             throw new \Exception("");
         } catch (\Exception $e) {
@@ -152,7 +153,7 @@ class SensorsAnalytics {
                 // 脚本内直接调用
                 $file = $trace[2]['file'];
                 $line = $trace[2]['line'];
-                
+
                 $lib_properties['$lib_detail'] = "####$file##$line";
             } else if (count($trace > 3)) {
                 if (isset($trace[3]['class'])) {
@@ -162,7 +163,7 @@ class SensorsAnalytics {
                     // 全局函数内调用
                     $class = '';
                 }
-                
+
                 // XXX: 此处使用 [2] 非笔误，trace 信息就是如此
                 $file = $trace[2]['file'];
                 $line = $trace[2]['line'];
@@ -171,8 +172,8 @@ class SensorsAnalytics {
                 $lib_properties['$lib_detail'] = "$class##$function##$file##$line";
             }
         }
-        
-        return $lib_properties; 
+
+        return $lib_properties;
     }
 
     /**
@@ -191,6 +192,8 @@ class SensorsAnalytics {
      * @param string $distinct_id 用户的唯一标识。
      * @param string $event_name 事件名称。
      * @param array $properties 事件的属性。
+     * @return bool
+     * @throws \SensorsAnalyticsIllegalDataException
      */
     public function track($distinct_id, $event_name, $properties = array()) {
         if ($properties) {
@@ -207,6 +210,8 @@ class SensorsAnalytics {
      * @param string $distinct_id 用户注册之后的唯一标识。
      * @param string $original_id 用户注册前的唯一标识。
      * @param array $properties 事件的属性。
+     * @return bool
+     * @throws \SensorsAnalyticsIllegalDataException 当 $original_id 不存在或参数有误时抛出
      */
     public function track_signup($distinct_id, $original_id, $properties = array()) {
         if ($properties) {
@@ -229,7 +234,8 @@ class SensorsAnalytics {
      *
      * @param string $distinct_id
      * @param array $profiles
-     * @return boolean
+     * @return bool
+     * @throws \SensorsAnalyticsIllegalDataException
      */
     public function profile_set($distinct_id, $profiles = array()) {
         return $this->_track_event('profile_set', null, $distinct_id, null, $profiles);
@@ -240,18 +246,20 @@ class SensorsAnalytics {
      *
      * @param string $distinct_id
      * @param array $profiles
-     * @return boolean
+     * @return bool
+     * @throws \SensorsAnalyticsIllegalDataException
      */
     public function profile_set_once($distinct_id, $profiles = array()) {
         return $this->_track_event('profile_set_once', null, $distinct_id, null, $profiles);
     }
-    
+
     /**
      * 增减/减少一个用户的某一个或者多个数值类型的 Profile。
      *
      * @param string $distinct_id
      * @param array $profiles
-     * @return boolean
+     * @return bool
+     * @throws \SensorsAnalyticsIllegalDataException
      */
     public function profile_increment($distinct_id, $profiles = array()) {
         return $this->_track_event('profile_increment', null, $distinct_id, null, $profiles);
@@ -262,7 +270,8 @@ class SensorsAnalytics {
      *
      * @param string $distinct_id
      * @param array $profiles
-     * @return boolean
+     * @return bool
+     * @throws \SensorsAnalyticsIllegalDataException
      */
     public function profile_append($distinct_id, $profiles = array()) {
         return $this->_track_event('profile_append', null, $distinct_id, null, $profiles);
@@ -273,7 +282,8 @@ class SensorsAnalytics {
      *
      * @param string $distinct_id
      * @param array $profile_keys
-     * @return boolean
+     * @return bool
+     * @throws \SensorsAnalyticsIllegalDataException
      */
     public function profile_unset($distinct_id, $profile_keys = array()) {
         if ($profile_keys != null && array_key_exists(0, $profile_keys)) {
@@ -291,7 +301,8 @@ class SensorsAnalytics {
      * 删除整个用户的信息。
      *
      * @param $distinct_id
-     * @return boolean
+     * @return bool
+     * @throws \SensorsAnalyticsIllegalDataException
      */
     public function profile_delete($distinct_id) {
         return $this->_track_event('profile_delete', null, $distinct_id, null, array());
@@ -300,7 +311,7 @@ class SensorsAnalytics {
     /**
      * 设置每个事件都带有的一些公共属性
      *
-     * @param super_properties 
+     * @param super_properties
      */
     public function register_super_properties($super_properties) {
         $this->_super_properties = array_merge($this->_super_properties, $super_properties);
@@ -334,9 +345,12 @@ class SensorsAnalytics {
 
     /**
      * @param string $update_type
+     * @param string $event_name
      * @param string $distinct_id
-     * @param array $profiles
-     * @return boolean
+     * @param string $original_id
+     * @param array $properties
+     * @return bool
+     * @throws \SensorsAnalyticsIllegalDataException
      */
     public function _track_event($update_type, $event_name, $distinct_id, $original_id, $properties) {
         $event_time = $this->_extract_user_time($properties);
@@ -369,14 +383,14 @@ abstract class AbstractConsumer {
      * 发送一条消息。
      *
      * @param string $msg 发送的消息体
-     * @return boolean
+     * @return bool
      */
     public abstract function send($msg);
 
     /**
      * 立即发送所有未发出的数据。
      *
-     * @return boolean
+     * @return bool
      */
     public function flush() {
     }
@@ -384,7 +398,7 @@ abstract class AbstractConsumer {
     /**
      * 关闭 Consumer 并释放资源。
      *
-     * @return boolean
+     * @return bool
      */
     public function  close() {
     }
@@ -423,7 +437,7 @@ class DebugConsumer extends AbstractConsumer {
     /**
      * DebugConsumer constructor,用于调试模式.
      * 具体说明可以参照:http://www.sensorsdata.cn/manual/debug_mode.html
-     * 
+     *
      * @param string $url_prefix 服务器的URL地址
      * @param bool $write_data 是否把发送的数据真正写入
      * @param int $request_timeout 请求服务器的超时时间,单位毫秒.
@@ -503,13 +517,13 @@ class DebugConsumer extends AbstractConsumer {
         curl_setopt($ch, CURLOPT_POST, 1);
         curl_setopt($ch, CURLOPT_POSTFIELDS, implode('&', $params));
         curl_setopt($ch, CURLOPT_USERAGENT, "PHP SDK");
-        
+
         $http_response_header = curl_exec($ch);
         if (!$http_response_header) {
             throw new SensorsAnalyticsDebugException(
-                   "Failed to connect to SensorsAnalytics. [error='" + curl_error($ch) + "']"); 
+                   "Failed to connect to SensorsAnalytics. [error='" + curl_error($ch) + "']");
         }
-        
+
         $result = array(
             "ret_content" => $http_response_header,
             "ret_code" => curl_getinfo($ch, CURLINFO_HTTP_CODE)
