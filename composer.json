@@ -1,5 +1,5 @@
 {
-    "name": "sensorsdata/sa-sdk-php",
+    "name": "huangzhhui/sa-sdk-php",
     "type": "library",
     "homepage": "http://sensorsdata.cn",
     "description": "PHP SDK for Sensors Analytics",
