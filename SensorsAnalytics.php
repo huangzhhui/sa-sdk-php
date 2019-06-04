@@ -146,7 +146,7 @@ class SensorsAnalytics {
      * 如果用户传入了 $time 字段，则不使用当前时间。
      *
      * @param array $properties
-     * @return int
+     * @return int|string 如果处于 32 位系统下，则在 int 溢出时会返回一个字符串，其余情况下会返回 int
      */
     private function _extract_user_time(&$properties = array()) {
         if (array_key_exists('$time', $properties)) {
@@ -154,7 +154,13 @@ class SensorsAnalytics {
             unset($properties['$time']);
             return $time;
         }
-        return (int)(microtime(true) * 1000);
+        $time = (microtime(true) * 1000);
+        $time = filter_var($time, FILTER_VALIDATE_INT);
+        // 当前处于 32 位系统下，返回字符串形式
+        if ($time === false) {
+            return sprintf("%.0f", $time);
+        }
+        return $time;
     }
 
     /**
